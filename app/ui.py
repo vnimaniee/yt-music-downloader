@@ -95,16 +95,20 @@ class MainWindow(QMainWindow):
         track_header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.tracklist_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tracklist_table.verticalHeader().setVisible(False)
+
+        self.select_all_checkbox = QCheckBox(parent=track_header)
+        self.select_all_checkbox.setTristate(True)
+        self.select_all_checkbox.show()
+        track_header.geometriesChanged.connect(self._reposition_select_all_checkbox)
+        track_header.sectionResized.connect(lambda index, old, new: self._reposition_select_all_checkbox() if index == 0 else None)
+
         right_layout.addWidget(self.tracklist_table)
 
         # --- Download Controls ---
         download_controls_layout = QHBoxLayout()
-        self.select_all_checkbox = QCheckBox("Select All")
-        self.select_all_checkbox.setTristate(True)
         self.format_selector = QComboBox()
         self.format_selector.addItems(['mp3', 'flac', 'wav', 'm4a', 'opus'])
         self.download_button = QPushButton("Download Checked")
-        download_controls_layout.addWidget(self.select_all_checkbox)
         download_controls_layout.addWidget(QLabel("Format:"))
         download_controls_layout.addWidget(self.format_selector)
         download_controls_layout.addWidget(self.download_button)
@@ -210,6 +214,13 @@ class MainWindow(QMainWindow):
         else:
             self.select_all_checkbox.setCheckState(Qt.PartiallyChecked)
         self.select_all_checkbox.blockSignals(False)
+
+    def _reposition_select_all_checkbox(self):
+        header = self.tracklist_table.horizontalHeader()
+        checkbox_size = self.select_all_checkbox.sizeHint()
+        y = int((header.height() - checkbox_size.height()) / 2)
+        x = int((header.sectionSize(0) - checkbox_size.width()) / 2)
+        self.select_all_checkbox.move(x, y)
 
     def on_track_check_changed(self, item):
         if item.column() == 0:
