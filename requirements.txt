@@ -1,0 +1,6 @@
+PySide6
+yt-dlp
+ytmusicapi
+requests
+mutagen
+pyinstaller
