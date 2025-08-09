@@ -9,23 +9,24 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QThread
 
 from .worker import DownloadWorker
-from .youtube_api import YouTubeMusicClient
+from .youtube_api import YouTubeMusicClient, get_ytmusicapi_lang, supported_lang
+from .utils import get_system_locale
 
 class ProgressDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Downloading...")
+        self.setWindowTitle(self.tr("Downloading..."))
         self.setModal(True)
         self.setFixedSize(400, 100)
         layout = QVBoxLayout(self)
-        self.status_label = QLabel("Download in progress, please wait...")
+        self.status_label = QLabel(self.tr("Download in progress, please wait..."))
         self.status_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.status_label)
 
 class ErrorDialog(QDialog):
     def __init__(self, summary, details, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Error")
+        self.setWindowTitle(self.tr("Error"))
         self.setModal(True)
         self.setMinimumSize(600, 400)
 
@@ -39,7 +40,7 @@ class ErrorDialog(QDialog):
         details_box.setReadOnly(True)
         layout.addWidget(details_box)
 
-        close_button = QPushButton("Close")
+        close_button = QPushButton(self.tr("Close"))
         close_button.clicked.connect(self.accept)
         layout.addWidget(close_button, 0, Qt.AlignRight)
 
@@ -58,15 +59,19 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left_panel)
         search_layout = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Enter album name to search...")
-        self.search_button = QPushButton("Search")
+        self.search_input.setPlaceholderText(self.tr("Enter album name to search..."))
+        self.search_button = QPushButton(self.tr("Search"))
+        self.search_language = QComboBox()
+        self.search_language.addItems(supported_lang)
+        self.search_language.setCurrentText(get_ytmusicapi_lang(get_system_locale()))
         search_layout.addWidget(self.search_input)
+        search_layout.addWidget(self.search_language)
         search_layout.addWidget(self.search_button)
         left_layout.addLayout(search_layout)
 
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(4)
-        self.results_table.setHorizontalHeaderLabels(["Title", "Artist", "Year", "Type"])
+        self.results_table.setHorizontalHeaderLabels([self.tr("Title"), self.tr("Artist"), self.tr("Year"), self.tr("Type")])
         header = self.results_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.Stretch)
@@ -80,14 +85,14 @@ class MainWindow(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
 
-        self.album_art_label = QLabel("Select an album to see details")
+        self.album_art_label = QLabel(self.tr("Select an album to see details"))
         self.album_art_label.setAlignment(Qt.AlignCenter)
         self.album_art_label.setMinimumSize(300, 300)
         right_layout.addWidget(self.album_art_label)
 
         self.tracklist_table = QTableWidget()
         self.tracklist_table.setColumnCount(4)
-        self.tracklist_table.setHorizontalHeaderLabels(["", "#", "Title", "Duration"])
+        self.tracklist_table.setHorizontalHeaderLabels((["", "#", self.tr("Title"), self.tr("Duration")]))
         track_header = self.tracklist_table.horizontalHeader()
         track_header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         track_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -108,8 +113,8 @@ class MainWindow(QMainWindow):
         download_controls_layout = QHBoxLayout()
         self.format_selector = QComboBox()
         self.format_selector.addItems(['mp3', 'flac', 'wav', 'm4a', 'opus'])
-        self.download_button = QPushButton("Download Checked")
-        download_controls_layout.addWidget(QLabel("Format:"))
+        self.download_button = QPushButton(self.tr("Download"))
+        download_controls_layout.addWidget(QLabel(self.tr("Format:")))
         download_controls_layout.addWidget(self.format_selector)
         download_controls_layout.addWidget(self.download_button)
         right_layout.addLayout(download_controls_layout)
@@ -136,19 +141,28 @@ class MainWindow(QMainWindow):
         if not query: return
         self.results_table.setRowCount(0)
         self.clear_details()
+        self.ytmusic_client.set_language(self.search_language.currentText())
         try:
             search_results = self.ytmusic_client.search_albums(query)
         except Exception as e:
             self.statusBar().showMessage(f"Search failed: {e}", 5000)
             return
         for album in search_results:
-            row, artists = self.results_table.rowCount(), ', '.join([a['name'] for a in album.get('artists', [])]) or 'N/A'
+            row = self.results_table.rowCount()
+            if self.search_language.currentText() in ['ko', 'ja', 'zh_TW', 'zh_CN']:
+                # something is wrong with ytmusicapi search in ko, jp, zh.
+                # TODO: fix problem with zh_TW, zh_CN.
+                artists = ', '.join([a['name'] for a in album.get('artists', [])[:-1]]) or 'N/A'
+                year = album['artists'][-1]['name'] if len(album.get('artists', [])) >= 1 else 'N/A'
+            else:
+                artists = ', '.join([a['name'] for a in album.get('artists', [])]) or 'N/A'
+                year = str(album.get('year', 'N/A'))
             self.results_table.insertRow(row)
             title_item = QTableWidgetItem(album.get('title', 'N/A'))
             title_item.setData(Qt.UserRole, album.get('browseId'))
             self.results_table.setItem(row, 0, title_item)
             self.results_table.setItem(row, 1, QTableWidgetItem(artists))
-            self.results_table.setItem(row, 2, QTableWidgetItem(str(album.get('year', 'N/A'))))
+            self.results_table.setItem(row, 2, QTableWidgetItem(year))
             self.results_table.setItem(row, 3, QTableWidgetItem(album.get('type', 'N/A')))
 
     def display_album_details(self):
@@ -168,7 +182,7 @@ class MainWindow(QMainWindow):
                 pixmap.loadFromData(requests.get(album_details['thumbnails'][-1]['url']).content)
                 self.album_art_label.setPixmap(pixmap.scaled(self.album_art_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
             except requests.exceptions.RequestException:
-                self.album_art_label.setText("Image not available")
+                self.album_art_label.setText(self.tr("Image not available"))
         
         self.tracklist_table.blockSignals(True)
         self.tracklist_table.setRowCount(0)
@@ -184,7 +198,7 @@ class MainWindow(QMainWindow):
                     check_item.setData(Qt.UserRole, i + 1) # Store track index (1-based)
                 else:
                     check_item.setFlags(Qt.ItemIsEnabled)
-                    check_item.setToolTip("This album is not available for download.")
+                    check_item.setToolTip(self.tr("This album is not available for download."))
                 
                 check_item.setCheckState(Qt.Unchecked)
                 num_item.setTextAlignment(Qt.AlignCenter)
@@ -241,22 +255,22 @@ class MainWindow(QMainWindow):
 
     def initiate_download(self):
         if not self.current_album_playlist_id:
-            self.statusBar().showMessage("This album is not available for download.", 3000); return
+            self.statusBar().showMessage(self.tr("This album is not available for download."), 3000); return
 
         track_indices = []
         for row in range(self.tracklist_table.rowCount()):
             if self.tracklist_table.item(row, 0).checkState() == Qt.Checked:
                 track_indices.append(self.tracklist_table.item(row, 0).data(Qt.UserRole))
         
-        if not track_indices: self.statusBar().showMessage("No tracks checked for download.", 3000); return
+        if not track_indices: self.statusBar().showMessage(self.tr("No tracks checked for download."), 3000); return
         
-        save_path = QFileDialog.getExistingDirectory(self, "Select Download Folder")
+        save_path = QFileDialog.getExistingDirectory(self, self.tr("Select Download Folder"))
         if not save_path: return
         
         audio_format = self.format_selector.currentText()
         self.download_button.setEnabled(False)
         self.select_all_checkbox.setEnabled(False)
-        self.statusBar().showMessage(f"Preparing download for {len(track_indices)} track(s)...")
+        self.statusBar().showMessage(self.tr(f"Preparing download for {len(track_indices)} track(s)..."))
 
         self.progress_dialog = ProgressDialog(self)
         self.progress_dialog.show()
@@ -289,7 +303,7 @@ class MainWindow(QMainWindow):
 
     def clear_details(self):
         self.album_art_label.clear()
-        self.album_art_label.setText("Select an album to see details")
+        self.album_art_label.setText(self.tr("Select an album to see details"))
         self.tracklist_table.setRowCount(0)
         self.download_button.setEnabled(False)
         self.select_all_checkbox.setCheckState(Qt.Unchecked)

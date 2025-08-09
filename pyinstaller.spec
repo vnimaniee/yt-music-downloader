@@ -30,7 +30,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[(ffmpeg_path, '.')],  # Add ffmpeg.exe to the root of the bundle
-    datas=[(ytmusicapi_locales_path, 'ytmusicapi/locales')],
+    datas=[(ytmusicapi_locales_path, 'ytmusicapi/locales'), ('translations', 'translations')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

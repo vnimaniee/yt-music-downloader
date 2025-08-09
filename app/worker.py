@@ -60,7 +60,7 @@ class DownloadWorker(QObject):
             except Exception:
                 tb = traceback.format_exc()
                 print(tb, file=sys.stderr)
-                self.error.emit("Download failed.", tb)
+                self.error.emit(self.tr("Download failed."), tb)
                 return # Stop execution if download fails
 
             try: # tagging
@@ -81,6 +81,6 @@ class DownloadWorker(QObject):
             except Exception:
                 tb = traceback.format_exc()
                 print(tb, file=sys.stderr)
-                self.error.emit("Tagging failed.", tb)
+                self.error.emit(self.tr("Tagging failed."), tb)
             else:
-                self.finished.emit(f"Successfully downloaded {len(track_indices)} track(s)!")
+                self.finished.emit(self.tr(f"Successfully downloaded {len(track_indices)} track(s)!"))
