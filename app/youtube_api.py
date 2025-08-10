@@ -1,6 +1,8 @@
 from ytmusicapi import YTMusic
 from ytmusicapi.exceptions import YTMusicUserError
 
+from .utils import get_system_locale
+
 supported_lang = ['zh_TW', 'tr', 'hi', 'es', 'ar', 'de', 'fr', 'it', 'nl', 'ja', 'ur', 'ko', 'zh_CN', 'pt', 'en', 'ru']
 
 def get_ytmusicapi_lang(language: str) -> str:
@@ -13,11 +15,11 @@ def get_ytmusicapi_lang(language: str) -> str:
         raise YTMusicUserError("Unsupported Language")
 
 class YouTubeMusicClient:
-    def __init__(self, language: str='en'):
-        self.ytmusic = YTMusic(language=get_ytmusicapi_lang(language))
-    
+    def __init__(self, language=get_ytmusicapi_lang(get_system_locale())):
+        self.ytmusic = YTMusic(language=language)
+
     def set_language(self, language):
-        self.__init__(language)
+        self.ytmusic = YTMusic(language=language)
 
     def search_albums(self, query):
         """Searches for albums with the given query."""
@@ -29,4 +31,8 @@ class YouTubeMusicClient:
         """Gets the details of an album by its browseId."""
         if not browse_id:
             return None
-        return self.ytmusic.get_album(browseId=browse_id)
+        try:
+            return self.ytmusic.get_album(browseId=browse_id)
+        except Exception as e:
+            print(e)
+            return None

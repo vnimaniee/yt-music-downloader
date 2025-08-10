@@ -1,4 +1,5 @@
 import requests
+import re
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout,
@@ -63,7 +64,10 @@ class MainWindow(QMainWindow):
         self.search_button = QPushButton(self.tr("Search"))
         self.search_language = QComboBox()
         self.search_language.addItems(supported_lang)
-        self.search_language.setCurrentText(get_ytmusicapi_lang(get_system_locale()))
+        try:
+            self.search_language.setCurrentText(get_ytmusicapi_lang(get_system_locale()))
+        except:
+            self.search_language.setCurrentText('en')
         search_layout.addWidget(self.search_input)
         search_layout.addWidget(self.search_language)
         search_layout.addWidget(self.search_button)
@@ -85,10 +89,22 @@ class MainWindow(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
 
+        self.album_details_widget = QWidget()
+        album_details_layout = QVBoxLayout(self.album_details_widget)
         self.album_art_label = QLabel(self.tr("Select an album to see details"))
         self.album_art_label.setAlignment(Qt.AlignCenter)
         self.album_art_label.setMinimumSize(300, 300)
-        right_layout.addWidget(self.album_art_label)
+        self.album_title_label = QLabel()
+        self.album_title_label.setAlignment(Qt.AlignCenter)
+        self.album_artist_label = QLabel()
+        self.album_artist_label.setAlignment(Qt.AlignCenter)
+        self.album_year_label = QLabel()
+        self.album_year_label.setAlignment(Qt.AlignCenter)
+        album_details_layout.addWidget(self.album_art_label)
+        album_details_layout.addWidget(self.album_title_label)
+        album_details_layout.addWidget(self.album_artist_label)
+        album_details_layout.addWidget(self.album_year_label)
+        right_layout.addWidget(self.album_details_widget)
 
         self.tracklist_table = QTableWidget()
         self.tracklist_table.setColumnCount(4)
@@ -126,6 +142,7 @@ class MainWindow(QMainWindow):
         # --- Connections & State ---
         self.search_button.clicked.connect(self.search_albums)
         self.search_input.returnPressed.connect(self.search_albums)
+        self.search_language.currentTextChanged.connect(self.on_search_language_changed)
         self.results_table.itemSelectionChanged.connect(self.display_album_details)
         self.tracklist_table.itemChanged.connect(self.on_track_check_changed)
         self.select_all_checkbox.stateChanged.connect(self.toggle_all_tracks)
@@ -141,7 +158,6 @@ class MainWindow(QMainWindow):
         if not query: return
         self.results_table.setRowCount(0)
         self.clear_details()
-        self.ytmusic_client.set_language(self.search_language.currentText())
         try:
             search_results = self.ytmusic_client.search_albums(query)
         except Exception as e:
@@ -149,21 +165,31 @@ class MainWindow(QMainWindow):
             return
         for album in search_results:
             row = self.results_table.rowCount()
-            if self.search_language.currentText() in ['ko', 'ja', 'zh_TW', 'zh_CN']:
-                # something is wrong with ytmusicapi search in ko, jp, zh.
-                # TODO: fix problem with zh_TW, zh_CN.
-                artists = ', '.join([a['name'] for a in album.get('artists', [])[:-1]]) or 'N/A'
-                year = album['artists'][-1]['name'] if len(album.get('artists', [])) >= 1 else 'N/A'
-            else:
-                artists = ', '.join([a['name'] for a in album.get('artists', [])]) or 'N/A'
-                year = str(album.get('year', 'N/A'))
+
+            artists_list = album.get('artists', [])
+            year = album.get('year')
+            album_type = album.get('type')
+
+            if not year and artists_list:
+                last_artist_name = artists_list[-1]['name']
+                if re.match(r'^\d{4}[년年]?$', last_artist_name):
+                    year = last_artist_name.replace('년', '').replace('年', '')
+                    artists_list = artists_list[:-1]
+            
+            if artists_list and artists_list[0]['name'] == album_type:
+                artists_list = artists_list[1:]
+
+            artists = ', '.join([a['name'] for a in artists_list]) or 'N/A'
+            year = str(year) if year else 'N/A'
+
             self.results_table.insertRow(row)
             title_item = QTableWidgetItem(album.get('title', 'N/A'))
+            title_item.setToolTip(album.get('title', 'N/A'))
             title_item.setData(Qt.UserRole, album.get('browseId'))
             self.results_table.setItem(row, 0, title_item)
             self.results_table.setItem(row, 1, QTableWidgetItem(artists))
             self.results_table.setItem(row, 2, QTableWidgetItem(year))
-            self.results_table.setItem(row, 3, QTableWidgetItem(album.get('type', 'N/A')))
+            self.results_table.setItem(row, 3, QTableWidgetItem(album_type))
 
     def display_album_details(self):
         selected = self.results_table.selectedItems()
@@ -176,6 +202,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.statusBar().showMessage(f"Error fetching album details: {e}", 5000); self.clear_details(); return
         
+        self.album_title_label.setText(f"<b>{album_details['title']}</b>")
+        self.album_artist_label.setText(', '.join([a['name'] for a in album_details.get('artists', [])]))
+        self.album_year_label.setText(str(album_details.get('year', '')))
+
         if album_details.get('thumbnails'):
             try:
                 pixmap = QPixmap()
@@ -192,6 +222,7 @@ class MainWindow(QMainWindow):
                 self.tracklist_table.insertRow(row)
                 check_item, num_item = QTableWidgetItem(), QTableWidgetItem(str(i + 1))
                 title_item, duration_item = QTableWidgetItem(track.get('title', 'N/A')), QTableWidgetItem(track.get('duration', 'N/A'))
+                title_item.setToolTip(track.get('title', 'N/A'))
                 
                 if self.current_album_playlist_id:
                     check_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
@@ -209,6 +240,10 @@ class MainWindow(QMainWindow):
                 self.tracklist_table.setItem(row, 3, duration_item)
         self.tracklist_table.blockSignals(False)
         self._update_download_controls_state()
+    
+    def on_search_language_changed(self):
+        self.ytmusic_client.set_language(self.search_language.currentText())
+        self.search_albums()
 
     def _get_checkable_rows(self):
         return [r for r in range(self.tracklist_table.rowCount()) if self.tracklist_table.item(r, 0).flags() & Qt.ItemIsUserCheckable]
@@ -268,6 +303,7 @@ class MainWindow(QMainWindow):
         if not save_path: return
         
         audio_format = self.format_selector.currentText()
+        language = self.search_language.currentText()
         self.download_button.setEnabled(False)
         self.select_all_checkbox.setEnabled(False)
         self.statusBar().showMessage(self.tr(f"Preparing download for {len(track_indices)} track(s)..."))
@@ -285,7 +321,7 @@ class MainWindow(QMainWindow):
         worker.finished.connect(self.on_download_finished)
         worker.error.connect(self.on_download_error)
         
-        self.download_thread.started.connect(lambda: worker.run(self.current_album_playlist_id, track_indices, save_path, audio_format))
+        self.download_thread.started.connect(lambda: worker.run(self.current_album_playlist_id, track_indices, save_path, audio_format, language))
         worker.finished.connect(self.download_thread.quit)
         worker.error.connect(self.download_thread.quit)
         self.download_thread.finished.connect(self.download_thread.deleteLater)
@@ -304,6 +340,9 @@ class MainWindow(QMainWindow):
     def clear_details(self):
         self.album_art_label.clear()
         self.album_art_label.setText(self.tr("Select an album to see details"))
+        self.album_title_label.clear()
+        self.album_artist_label.clear()
+        self.album_year_label.clear()
         self.tracklist_table.setRowCount(0)
         self.download_button.setEnabled(False)
         self.select_all_checkbox.setCheckState(Qt.Unchecked)
