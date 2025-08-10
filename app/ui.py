@@ -151,6 +151,7 @@ class MainWindow(QMainWindow):
         self.ytmusic_client = YouTubeMusicClient()
         self.download_thread = None
         self.current_album_playlist_id = None
+        self.current_album_details = None
         self.clear_details() # Set initial state
 
     def search_albums(self):
@@ -198,6 +199,7 @@ class MainWindow(QMainWindow):
         if not browse_id: self.clear_details(); return
         try:
             album_details = self.ytmusic_client.get_album_details(browse_id)
+            self.current_album_details = album_details
             self.current_album_playlist_id = album_details.get('audioPlaylistId')
         except Exception as e:
             self.statusBar().showMessage(f"Error fetching album details: {e}", 5000); self.clear_details(); return
@@ -321,7 +323,7 @@ class MainWindow(QMainWindow):
         worker.finished.connect(self.on_download_finished)
         worker.error.connect(self.on_download_error)
         
-        self.download_thread.started.connect(lambda: worker.run(self.current_album_playlist_id, track_indices, save_path, audio_format, language))
+        self.download_thread.started.connect(lambda: worker.run(self.current_album_playlist_id, track_indices, save_path, audio_format, self.current_album_details))
         worker.finished.connect(self.download_thread.quit)
         worker.error.connect(self.download_thread.quit)
         self.download_thread.finished.connect(self.download_thread.deleteLater)
@@ -348,3 +350,4 @@ class MainWindow(QMainWindow):
         self.select_all_checkbox.setCheckState(Qt.Unchecked)
         self.select_all_checkbox.setEnabled(False)
         self.current_album_playlist_id = None
+        self.current_album_details = None
