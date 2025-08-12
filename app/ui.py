@@ -1,13 +1,16 @@
 import requests
 import re
+import yt_dlp
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
-    QComboBox, QFileDialog, QStatusBar, QCheckBox, QDialog, QTextEdit
+    QComboBox, QFileDialog, QStatusBar, QCheckBox, QDialog, QTextEdit, QSlider
 )
-from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtGui import QPixmap, QFont
+from PySide6.QtCore import Qt, QThread, QUrl, QTimer
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from .worker import DownloadWorker
 from .youtube_api import YouTubeMusicClient, get_ytmusicapi_lang, supported_lang
@@ -49,11 +52,14 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"YT Music Downloader")
-        self.resize(1200, 800)
+        self.resize(1200, 900)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+        root_layout = QVBoxLayout(central_widget)
+
+        main_content_widget = QWidget()
+        main_layout = QHBoxLayout(main_content_widget)
 
         # --- Left Panel ---
         left_panel = QWidget()
@@ -137,28 +143,114 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(left_panel, 2)
         main_layout.addWidget(right_panel, 1)
+        
+        root_layout.addWidget(main_content_widget)
+
+        # --- Music Player UI ---
+        emoji_font = QFont()
+        emoji_font.setPointSize(14)
+
+        player_widget = QWidget()
+        player_layout = QHBoxLayout(player_widget)
+        player_layout.setContentsMargins(5, 2, 5, 2) # Reduce margins
+
+        self.current_track_label = QLabel(self.tr("No music selected"))
+        self.current_track_label.setMaximumWidth(400)
+        self.prev_button = QPushButton("⏮︎")
+        self.play_pause_button = QPushButton("⏵︎")
+        self.stop_button = QPushButton("⏹︎")
+        self.next_button = QPushButton("⏭︎")
+        self.prev_button.setFont(emoji_font)
+        self.play_pause_button.setFont(emoji_font)
+        self.stop_button.setFont(emoji_font)
+        self.next_button.setFont(emoji_font)
+        
+        for btn in [self.prev_button, self.play_pause_button, self.stop_button, self.next_button]:
+            btn.setFixedSize(32, 32) # Reduce button size
+
+        self.current_time_label = QLabel("00:00")
+        self.timeline_slider = QSlider(Qt.Horizontal)
+        self.total_time_label = QLabel("00:00")
+        self.volume_slider = QSlider(Qt.Horizontal)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(100)
+        self.volume_slider.setFixedWidth(150)
+        self.volume_icon_label = QLabel("🔊")
+        self.volume_icon_label.setFont(emoji_font)
+
+        player_layout.addWidget(self.current_track_label, 2)
+        player_layout.addWidget(self.prev_button)
+        player_layout.addWidget(self.play_pause_button)
+        player_layout.addWidget(self.stop_button)
+        player_layout.addWidget(self.next_button)
+        player_layout.addWidget(self.current_time_label)
+        player_layout.addWidget(self.timeline_slider, 5)
+        player_layout.addWidget(self.total_time_label)
+        player_layout.addWidget(self.volume_icon_label)
+        player_layout.addWidget(self.volume_slider)
+        
+        root_layout.addWidget(player_widget)
+        root_layout.setStretchFactor(main_content_widget, 1)
+        
         self.setStatusBar(QStatusBar(self))
 
+        # --- Player ---
+        self.player = QMediaPlayer()
+        self._audio_output = QAudioOutput()
+        self.player.setAudioOutput(self._audio_output)
+        self.volume_slider.valueChanged.connect(self.set_player_volume)
+        self.set_player_volume(self.volume_slider.value())
+
         # --- Connections & State ---
-        self.search_button.clicked.connect(self.search_albums)
-        self.search_input.returnPressed.connect(self.search_albums)
+        self.search_button.clicked.connect(lambda: self.search_albums())
+        self.search_input.returnPressed.connect(lambda: self.search_albums())
         self.search_language.currentTextChanged.connect(self.on_search_language_changed)
         self.results_table.itemSelectionChanged.connect(self.display_album_details)
         self.tracklist_table.itemChanged.connect(self.on_track_check_changed)
+        self.tracklist_table.itemDoubleClicked.connect(self.play_track_from_table)
         self.select_all_checkbox.stateChanged.connect(self.toggle_all_tracks)
         self.download_button.clicked.connect(self.initiate_download)
+        self.play_pause_button.clicked.connect(self.toggle_playback)
+        self.stop_button.clicked.connect(self.stop_playback)
+        self.prev_button.clicked.connect(self.play_previous_track)
+        self.next_button.clicked.connect(self.play_next_track)
+        
+        self.player.playingChanged.connect(self.update_play_pause_button)
+        self.player.errorOccurred.connect(self.handle_player_error)
+        self.player.durationChanged.connect(self.update_slider_range)
+        self.player.positionChanged.connect(self.update_slider_position)
+        self.player.mediaStatusChanged.connect(self.handle_media_status_changed)
+        self.timeline_slider.sliderMoved.connect(self.set_player_position)
         
         self.ytmusic_client = YouTubeMusicClient()
         self.download_thread = None
         self.current_album_playlist_id = None
         self.current_album_details = None
+        self.currently_playing_track = None
+        self.current_track_row = -1
+        self.current_track_retries = 0
+        self.yt_dlp = yt_dlp.YoutubeDL({
+            'quiet': True,
+            'format': 'bestaudio/best',
+        })
         self.clear_details() # Set initial state
 
-    def search_albums(self):
-        query = self.search_input.text()
+    def format_time(self, ms):
+        seconds = int((ms/1000)%60)
+        minutes = int((ms/(1000*60))%60)
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def set_player_volume(self, value):
+        volume_float = value / 100.0
+        self._audio_output.setVolume(volume_float)
+
+    def search_albums(self, query=None, preserve_details=False):
+        if query is None:
+            query = self.search_input.text()
         if not query: return
         self.results_table.setRowCount(0)
-        self.clear_details()
+        if not preserve_details:
+            self.clear_details()
         try:
             search_results = self.ytmusic_client.search_albums(query)
         except Exception as e:
@@ -199,11 +291,15 @@ class MainWindow(QMainWindow):
         if not browse_id: self.clear_details(); return
         try:
             album_details = self.ytmusic_client.get_album_details(browse_id)
-            self.current_album_details = album_details
-            self.current_album_playlist_id = album_details.get('audioPlaylistId')
+            self._update_album_details_ui(album_details)
         except Exception as e:
-            self.statusBar().showMessage(f"Error fetching album details: {e}", 5000); self.clear_details(); return
-        
+            self.statusBar().showMessage(f"Error fetching album details: {e}", 5000)
+            self.clear_details()
+
+    def _update_album_details_ui(self, album_details):
+        self.current_album_details = album_details
+        self.current_album_playlist_id = album_details.get('audioPlaylistId')
+
         self.album_title_label.setText(f"<b>{album_details['title']}</b>")
         self.album_artist_label.setText(', '.join([a['name'] for a in album_details.get('artists', [])]))
         self.album_year_label.setText(str(album_details.get('year', '')))
@@ -242,10 +338,20 @@ class MainWindow(QMainWindow):
                 self.tracklist_table.setItem(row, 3, duration_item)
         self.tracklist_table.blockSignals(False)
         self._update_download_controls_state()
-    
+
     def on_search_language_changed(self):
         self.ytmusic_client.set_language(self.search_language.currentText())
-        self.search_albums()
+        
+        current_browse_id = self.current_album_details.get('browseId') if self.current_album_details else None
+
+        self.search_albums(preserve_details=bool(current_browse_id))
+
+        if current_browse_id:
+            try:
+                new_details = self.ytmusic_client.get_album_details(current_browse_id)
+                self._update_album_details_ui(new_details)
+            except Exception as e:
+                self.statusBar().showMessage(f"Error refreshing album details: {e}", 5000)
 
     def _get_checkable_rows(self):
         return [r for r in range(self.tracklist_table.rowCount()) if self.tracklist_table.item(r, 0).flags() & Qt.ItemIsUserCheckable]
@@ -351,3 +457,139 @@ class MainWindow(QMainWindow):
         self.select_all_checkbox.setEnabled(False)
         self.current_album_playlist_id = None
         self.current_album_details = None
+        self.stop_playback()
+
+    def get_track_info(self, row):
+        if not (0 <= row < self.tracklist_table.rowCount()):
+            return None
+        
+        title_item = self.tracklist_table.item(row, 2)
+        track_details = self.current_album_details['tracks'][row]
+        
+        artists = 'N/A'
+        if 'artists' in track_details and track_details['artists']:
+            artists = ', '.join([a['name'] for a in track_details['artists']])
+
+        return {
+            'title': title_item.text(),
+            'artists': artists
+        }
+
+    def play_track_from_table(self, item):
+        self.statusBar().showMessage(self.tr("Preparing to play track..."), 2000)
+        self.play_track(item.row())
+
+    def toggle_playback(self):
+        if self.player.playbackState() == QMediaPlayer.PlayingState:
+            self.player.pause()
+        elif self.player.playbackState() == QMediaPlayer.PausedState:
+            self.player.play()
+        else: # Stopped or no media
+            selected_items = self.tracklist_table.selectedItems()
+            if selected_items:
+                self.play_track(selected_items[0].row())
+
+    def stop_playback(self):
+        self.player.stop()
+        self.current_track_label.setText(self.tr("No music selected"))
+        self.timeline_slider.setValue(0)
+        self.current_time_label.setText("00:00")
+        self.total_time_label.setText("00:00")
+        self.currently_playing_track = None
+        self.current_track_row = -1
+        self.current_track_retries = 0
+
+    def play_track(self, row, is_retry=False):
+        if not is_retry and self.current_track_row == row and self.player.playbackState() != QMediaPlayer.StoppedState:
+            self.toggle_playback()
+            return
+
+        if self.current_track_row != row:
+            self.current_track_retries = 0
+
+        if not self.current_album_playlist_id:
+            self.statusBar().showMessage(self.tr("Cannot play track - no album playlist ID found."), 3000)
+            return
+
+        track_info = self.get_track_info(row)
+        if not track_info:
+            self.statusBar().showMessage(self.tr("Could not find track info."), 3000)
+            return
+
+        playlist_id = self.current_album_playlist_id
+        track_index = str(row + 1) # yt-dlp needs a string for playlist_items
+
+        self.statusBar().showMessage(self.tr("Fetching stream URL..."))
+        
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'format': 'bestaudio/best',
+                'playlist_items': track_index,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(f"https://www.youtube.com/playlist?list={playlist_id}", download=False)
+
+            if 'entries' in info and info['entries']:
+                video_info = info['entries'][0]
+                stream_url = video_info['url']
+                track_info['title'] = track_info['title']
+                track_info['artists'] = track_info['artists'] # yt-dlp may use 'artist'
+            else:
+                raise yt_dlp.utils.DownloadError("Track not found in playlist.")
+
+        except Exception as e:
+            self.statusBar().showMessage(f"{self.tr('Error getting stream URL')}: {e}", 5000)
+            self.handle_player_error()
+            return
+
+        self.currently_playing_track = track_info
+        self.current_track_row = row
+        self.current_track_label.setText(f"<b>{track_info['title']}</b><br>{track_info['artists']}")
+        self.player.setSource(QUrl(stream_url))
+        self.player.play()
+        self.statusBar().showMessage(self.tr("Playing..."), 3000)
+
+    def handle_player_error(self):
+        if self.current_track_row != -1 and self.current_track_retries < 3:
+            self.current_track_retries += 1
+            self.statusBar().showMessage(self.tr(f"Playback failed. Retrying... ({self.current_track_retries}/3)"), 3000)
+            QTimer.singleShot(1000, lambda: self.play_track(self.current_track_row, is_retry=True))
+        else:
+            self.statusBar().showMessage(self.tr("Playback failed. Please try another track."), 5000)
+            self.stop_playback()
+
+    def update_play_pause_button(self, playing):
+        if playing:
+            self.play_pause_button.setText("⏸︎")
+        else:
+            self.play_pause_button.setText("⏵︎")
+
+    def update_slider_range(self, duration):
+        self.timeline_slider.setRange(0, duration)
+        self.total_time_label.setText(self.format_time(duration))
+
+    def update_slider_position(self, position):
+        self.timeline_slider.blockSignals(True)
+        self.timeline_slider.setValue(position)
+        self.timeline_slider.blockSignals(False)
+        self.current_time_label.setText(self.format_time(position))
+
+    def set_player_position(self, position):
+        self.player.setPosition(position)
+
+    def handle_media_status_changed(self, status):
+        if status == QMediaPlayer.MediaStatus.EndOfMedia and self.current_track_row != -1:
+            self.play_next_track()
+
+    def play_next_track(self):
+        next_row = self.current_track_row + 1
+        if 0 <= next_row < self.tracklist_table.rowCount():
+            self.play_track(next_row)
+        else:
+            self.stop_playback()
+
+    def play_previous_track(self):
+        prev_row = self.current_track_row - 1
+        if 0 <= prev_row < self.tracklist_table.rowCount():
+            self.play_track(prev_row)
