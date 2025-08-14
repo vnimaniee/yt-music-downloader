@@ -119,4 +119,4 @@ class DownloadWorker(QObject):
                 print(tb, file=sys.stderr)
                 self.error.emit("An error occurred during processing.", tb)
             else:
-                self.finished.emit(f"Successfully downloaded {len(track_indices)} track(s)!")
+                self.finished.emit(self.tr("Successfully downloaded {0} track(s)!").format(len(track_indices)))

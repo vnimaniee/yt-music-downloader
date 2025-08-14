@@ -414,7 +414,7 @@ class MainWindow(QMainWindow):
         language = self.search_language.currentText()
         self.download_button.setEnabled(False)
         self.select_all_checkbox.setEnabled(False)
-        self.statusBar().showMessage(self.tr(f"Preparing download for {len(track_indices)} track(s)..."))
+        self.statusBar().showMessage(self.tr("Preparing download for {0} track(s)...").format(len(track_indices)))
 
         self.progress_dialog = ProgressDialog(self)
         self.progress_dialog.show()
@@ -553,7 +553,7 @@ class MainWindow(QMainWindow):
     def handle_player_error(self):
         if self.current_track_row != -1 and self.current_track_retries < 3:
             self.current_track_retries += 1
-            self.statusBar().showMessage(self.tr(f"Playback failed. Retrying... ({self.current_track_retries}/3)"), 3000)
+            self.statusBar().showMessage(self.tr("Playback failed. Retrying... ({0}/3)").format(self.current_track_retries), 3000)
             QTimer.singleShot(1000, lambda: self.play_track(self.current_track_row, is_retry=True))
         else:
             self.statusBar().showMessage(self.tr("Playback failed. Please try another track."), 5000)

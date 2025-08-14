@@ -15,6 +15,11 @@
         <source>Successfully downloaded {len(track_indices)} track(s)!</source>
         <translation type="vanished">{len(track_indices)}개 트랙 다운로드 성공!</translation>
     </message>
+    <message>
+        <location filename="../app/worker.py" line="122"/>
+        <source>Successfully downloaded {0} track(s)!</source>
+        <translation>{0} 트랙 다운로드 성공!</translation>
+    </message>
 </context>
 <context>
     <name>ErrorDialog</name>
@@ -116,8 +121,17 @@
     </message>
     <message>
         <location filename="../app/ui.py" line="417"/>
+        <source>Preparing download for {0} track(s)...</source>
+        <translation>{0}개 트랙 다운로드 준비 중...</translation>
+    </message>
+    <message>
+        <location filename="../app/ui.py" line="556"/>
+        <source>Playback failed. Retrying... ({0}/3)</source>
+        <translation>재생 실패. 다시 시도 중...  ({0}/3)</translation>
+    </message>
+    <message>
         <source>Preparing download for {len(track_indices)} track(s)...</source>
-        <translation>{len(track_indices)} 다운로드 준비 중...</translation>
+        <translation type="vanished">{len(track_indices)} 다운로드 준비 중...</translation>
     </message>
     <message>
         <location filename="../app/ui.py" line="479"/>
@@ -145,9 +159,8 @@
         <translation>재생 중...</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="556"/>
         <source>Playback failed. Retrying... ({self.current_track_retries}/3)</source>
-        <translation>재생 실패. 다시 시도 중...  ({self.current_track_retries}/3)</translation>
+        <translation type="vanished">재생 실패. 다시 시도 중...  ({self.current_track_retries}/3)</translation>
     </message>
     <message>
         <location filename="../app/ui.py" line="559"/>
