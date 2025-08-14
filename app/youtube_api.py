@@ -15,7 +15,11 @@ def get_ytmusicapi_lang(language: str) -> str:
         raise YTMusicUserError("Unsupported Language")
 
 class YouTubeMusicClient:
-    def __init__(self, language=get_ytmusicapi_lang(get_system_locale())):
+    def __init__(self):
+        try:
+            language = get_ytmusicapi_lang(get_system_locale())
+        except YTMusicUserError:
+            language = 'en'
         self.ytmusic = YTMusic(language=language)
 
     def set_language(self, language):

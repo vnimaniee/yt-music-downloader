@@ -104,7 +104,13 @@ class DownloadWorker(QObject):
                 }
 
                 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-                    ydl_opts['ffmpeg_location'] = os.path.join(sys._MEIPASS, 'ffmpeg.exe')
+                    if sys.platform.startswith('win'):
+                        ffmpeg_name = 'ffmpeg.exe'
+                    else: # linux, darwin (macOS)
+                        ffmpeg_name = 'ffmpeg'
+                    
+                    # set bundled ffmpeg location
+                    ydl_opts['ffmpeg_location'] = os.path.join(sys._MEIPASS, ffmpeg_name)
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.add_post_processor(TagAudioPP(ydl, album_details), when='post_process')

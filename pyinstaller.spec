@@ -6,11 +6,17 @@ from pathlib import Path
 
 # --- Find required data files ---
 
-# 1. Find ffmpeg.exe in system PATH
-ffmpeg_path = shutil.which('ffmpeg.exe')
+# 1. Find ffmpeg binary based on the operating system
+if sys.platform.startswith('win'):
+    ffmpeg_name = 'ffmpeg.exe'
+else:  # for linux, darwin (macOS), etc.
+    ffmpeg_name = 'ffmpeg'
+
+ffmpeg_path = shutil.which(ffmpeg_name)
+print(f"Found ffmpeg at: {ffmpeg_path}")
 if not ffmpeg_path:
     raise FileNotFoundError(
-        "ffmpeg.exe not found in your system PATH. "
+        f"'{ffmpeg_name}' not found in your system PATH. "
         "Please install ffmpeg and ensure its location is in the PATH environment variable."
     )
 
@@ -29,7 +35,7 @@ block_cipher = None
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[(ffmpeg_path, '.')],  # Add ffmpeg.exe to the root of the bundle
+    binaries=[(ffmpeg_path, '.')],  # Add ffmpeg to the root of the bundle
     datas=[(ytmusicapi_locales_path, 'ytmusicapi/locales'), ('translations', 'translations')],
     hiddenimports=[],
     hookspath=[],
