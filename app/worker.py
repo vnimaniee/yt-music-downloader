@@ -118,7 +118,15 @@ class DownloadWorker(QObject):
 
                 for p in Path(temp_save_path).iterdir():
                     if p.is_file() and p.suffix.lower() in {'.mp3', '.flac', '.m4a', '.opus', '.wav'}:
-                        shutil.copy(p, save_path)
+                        dest_dir = Path(save_path)
+                        dest_path = dest_dir / p.name
+                        
+                        counter = 1
+                        while dest_path.exists():
+                            dest_path = dest_dir / f"{p.stem} ({counter}){p.suffix}"
+                            counter += 1
+                        
+                        shutil.copy(p, dest_path)
 
             except Exception:
                 tb = traceback.format_exc()
