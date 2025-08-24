@@ -23,6 +23,8 @@ class MusicPlayer(QWidget):
             'format': 'bestaudio/best',
         })
 
+        self.volume_before_mute = 100
+
         self._connect_signals()
         self.set_player_volume(self.volume_slider.value())
         self.stop_playback() # Set initial state
@@ -55,8 +57,10 @@ class MusicPlayer(QWidget):
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(100)
         self.volume_slider.setFixedWidth(150)
-        self.volume_icon_label = QLabel("🔊")
+        self.volume_icon_label = QPushButton("🔊")
         self.volume_icon_label.setFont(emoji_font)
+        self.volume_icon_label.setFixedSize(32, 32)
+        self.volume_icon_label.setStyleSheet("border: none;")
 
         layout.addWidget(self.current_track_label, 2)
         layout.addWidget(self.prev_button)
@@ -76,6 +80,7 @@ class MusicPlayer(QWidget):
         self.next_button.clicked.connect(self.play_next_track)
         self.volume_slider.valueChanged.connect(self.set_player_volume)
         self.timeline_slider.sliderMoved.connect(self.set_player_position)
+        self.volume_icon_label.clicked.connect(self.toggle_mute)
 
         self.player.playingChanged.connect(self.update_play_pause_button)
         self.player.errorOccurred.connect(self.handle_player_error)
@@ -91,6 +96,17 @@ class MusicPlayer(QWidget):
     def set_player_volume(self, value):
         volume_float = value / 100.0
         self._audio_output.setVolume(volume_float)
+        if value == 0:
+            self.volume_icon_label.setText("🔇")
+        else:
+            self.volume_icon_label.setText("🔊")
+            self.volume_before_mute = value
+
+    def toggle_mute(self):
+        if self.volume_slider.value() > 0:
+            self.volume_slider.setValue(0)
+        else:
+            self.volume_slider.setValue(self.volume_before_mute)
 
     def get_track_info(self, row):
         tracklist_table = self.main_window.tracklist_table

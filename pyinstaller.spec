@@ -3,6 +3,7 @@
 import shutil
 import sys
 from pathlib import Path
+import re
 
 # --- Find required data files ---
 
@@ -26,6 +27,17 @@ try:
     ytmusicapi_locales_path = str(Path(ytmusicapi.__file__).parent / 'locales')
 except ImportError:
     raise ImportError("ytmusicapi is not installed. Please run 'pip install -r requirements.txt'")
+
+
+# --- Read version and create app name ---
+version_info_path = Path('version_info.txt')
+version_info_content = version_info_path.read_text(encoding='utf-8')
+version_match = re.search(r"StringStruct\(u'FileVersion', u'([^']*)'\)", version_info_content)
+if not version_match:
+    raise RuntimeError("Could not find FileVersion in version_info.txt")
+file_version = version_match.group(1)
+app_version = '.'.join(file_version.split('.')[:3])
+app_name = f'yt-music-downloader-v{app_version}'
 
 
 # --- PyInstaller Analysis ---
@@ -59,7 +71,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='yt-music-downloader',  # Name of the final executable
+    name=app_name,  # Name of the final executable
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
