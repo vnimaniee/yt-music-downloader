@@ -30,15 +30,10 @@ except ImportError:
 
 
 # --- Read version and create app name ---
-version_info_path = Path('version_info.txt')
-version_info_content = version_info_path.read_text(encoding='utf-8')
-version_match = re.search(r"StringStruct\(u'FileVersion', u'([^']*)'\)", version_info_content)
-if not version_match:
-    raise RuntimeError("Could not find FileVersion in version_info.txt")
-file_version = version_match.group(1)
-app_version = '.'.join(file_version.split('.')[:3])
-app_name = f'yt-music-downloader-v{app_version}'
-
+sys.path.insert(0, SPECPATH)
+from app import __version__ as app_version
+from yt_dlp.version import __version__ as yt_dlp_version
+app_name = f'yt-music-downloader-v{app_version}_{yt_dlp_version}'
 
 # --- PyInstaller Analysis ---
 
@@ -85,5 +80,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None, # You can add an icon here, e.g., icon='app.ico'
-    version='version_info.txt'
 )
