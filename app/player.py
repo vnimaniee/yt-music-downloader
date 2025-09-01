@@ -1,4 +1,5 @@
 import yt_dlp
+import logging
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QSlider
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, QUrl, QTimer
@@ -7,6 +8,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 class MusicPlayer(QWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
+        logging.info("Initializing music player")
         self.main_window = main_window
 
         self._create_ui()
@@ -94,6 +96,7 @@ class MusicPlayer(QWidget):
         return f"{minutes:02d}:{seconds:02d}"
 
     def set_player_volume(self, value):
+        logging.debug(f"Setting player volume to {value}")
         volume_float = value / 100.0
         self._audio_output.setVolume(volume_float)
         if value == 0:
@@ -103,6 +106,7 @@ class MusicPlayer(QWidget):
             self.volume_before_mute = value
 
     def toggle_mute(self):
+        logging.debug("Toggling mute")
         if self.volume_slider.value() > 0:
             self.volume_slider.setValue(0)
         else:
@@ -127,20 +131,25 @@ class MusicPlayer(QWidget):
         }
 
     def play_track_from_table(self, item):
+        logging.info(f"User requested to play track from table, row: {item.row()}")
         self.main_window.statusBar().showMessage(self.tr("Preparing to play track..."), 2000)
         self.play_track(item.row())
 
     def toggle_playback(self):
         if self.player.playbackState() == QMediaPlayer.PlayingState:
+            logging.info("Pausing playback")
             self.player.pause()
         elif self.player.playbackState() == QMediaPlayer.PausedState:
+            logging.info("Resuming playback")
             self.player.play()
         else: # Stopped or no media
+            logging.info("No media, attempting to play from selection")
             selected_items = self.main_window.tracklist_table.selectedItems()
             if selected_items:
                 self.play_track(selected_items[0].row())
 
     def stop_playback(self):
+        logging.info("Stopping playback")
         self.player.stop()
         self.current_track_label.setText(self.tr("No music selected"))
         self.timeline_slider.setValue(0)
@@ -160,21 +169,24 @@ class MusicPlayer(QWidget):
 
         playlist_id = self.main_window.current_album_playlist_id
         if not playlist_id:
+            logging.warning("Cannot play track - no album playlist ID found.")
             self.main_window.statusBar().showMessage(self.tr("Cannot play track - no album playlist ID found."), 3000)
             return
 
         track_info = self.get_track_info(row)
         if not track_info:
+            logging.warning(f"Could not find track info for row: {row}")
             self.main_window.statusBar().showMessage(self.tr("Could not find track info."), 3000)
             return
 
         track_index = str(row + 1)
+        logging.info(f"Fetching stream URL for track: {track_info['title']} (index: {track_index})")
         self.main_window.statusBar().showMessage(self.tr("Fetching stream URL..."))
         
         try:
             ydl_opts = {
                 'quiet': True,
-                'format': 'bestaudio/best',
+                'format': 'bestaudio[ext=m4a]/bestaudio/best',
                 'playlist_items': track_index,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -183,10 +195,12 @@ class MusicPlayer(QWidget):
             if 'entries' in info and info['entries']:
                 video_info = info['entries'][0]
                 stream_url = video_info['url']
+                logging.debug(f"Found stream URL: {stream_url}")
             else:
                 raise yt_dlp.utils.DownloadError("Track not found in playlist.")
 
         except Exception as e:
+            logging.error(f"Error getting stream URL: {e}")
             self.main_window.statusBar().showMessage(f"{self.tr('Error getting stream URL')}: {e}", 5000)
             self.handle_player_error()
             return
@@ -196,14 +210,18 @@ class MusicPlayer(QWidget):
         self.current_track_label.setText(f"<b>{track_info['title']}</b><br>{track_info['artists']}")
         self.player.setSource(QUrl(stream_url))
         self.player.play()
+        logging.info(f"Playing track: {track_info['title']}")
         self.main_window.statusBar().showMessage(self.tr("Playing..."), 3000)
 
     def handle_player_error(self):
+        logging.error(f"Player error occurred. State: {self.player.error()}, String: {self.player.errorString()}")
         if self.current_track_row != -1 and self.current_track_retries < 3:
             self.current_track_retries += 1
+            logging.info(f"Retrying playback... ({self.current_track_retries}/3)")
             self.main_window.statusBar().showMessage(self.tr("Playback failed. Retrying... ({0}/3)").format(self.current_track_retries), 3000)
             QTimer.singleShot(1000, lambda: self.play_track(self.current_track_row, is_retry=True))
         else:
+            logging.error("Playback failed after multiple retries.")
             self.main_window.statusBar().showMessage(self.tr("Playback failed. Please try another track."), 5000)
             self.stop_playback()
 
@@ -224,20 +242,26 @@ class MusicPlayer(QWidget):
         self.current_time_label.setText(self.format_time(position))
 
     def set_player_position(self, position):
+        logging.debug(f"Setting player position to {position}")
         self.player.setPosition(position)
 
     def handle_media_status_changed(self, status):
+        logging.debug(f"Media status changed: {status}")
         if status == QMediaPlayer.MediaStatus.EndOfMedia and self.current_track_row != -1:
+            logging.info("Track finished, playing next")
             self.play_next_track()
 
     def play_next_track(self):
         next_row = self.current_track_row + 1
+        logging.info(f"Attempting to play next track, row: {next_row}")
         if 0 <= next_row < self.main_window.tracklist_table.rowCount():
             self.play_track(next_row)
         else:
+            logging.info("End of playlist reached")
             self.stop_playback()
 
     def play_previous_track(self):
         prev_row = self.current_track_row - 1
+        logging.info(f"Attempting to play previous track, row: {prev_row}")
         if 0 <= prev_row < self.main_window.tracklist_table.rowCount():
             self.play_track(prev_row)

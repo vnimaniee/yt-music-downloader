@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import traceback
+import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -19,7 +20,7 @@ class TagAudioPP(PostProcessor):
 
     def run(self, info):
         filepath = Path(info['filepath'])
-        self.to_screen(f'Checking for tags for {filepath.name}')
+        logging.info(f'Checking for tags for {filepath.name}')
         temp_save_path = filepath.parent
         
         cover_path = None
@@ -39,7 +40,7 @@ class TagAudioPP(PostProcessor):
                     track_info = self.album_details['tracks'][playlist_index - 1]
 
             if track_info:
-                self.to_screen(f"Found metadata for track #{playlist_index}: {track_info.get('title')}")
+                logging.info(f"Found metadata for track #{playlist_index}: {track_info.get('title')}")
                 tags['title'] = track_info.get('title')
                 if track_info.get('artists'):
                     tags['artist'] = ', '.join([a['name'] for a in track_info['artists']])
@@ -53,18 +54,18 @@ class TagAudioPP(PostProcessor):
                 if self.album_details.get('year'):
                     tags['year'] = self.album_details.get('year')
             else:
-                self.to_screen(f"Could not find metadata for {filepath.name} in album details.")
+                logging.warning(f"Could not find metadata for {filepath.name} in album details.")
 
         if cover_path or tags:
             try:
-                self.to_screen(f'Applying metadata for {filepath.name}')
+                logging.info(f'Applying metadata for {filepath.name}')
                 tag_audio(filepath, tags, cover_path)
             except NotImplementedError:
-                self.to_screen(f'Skipping tagging for {filepath.name}: unsupported file type')
+                logging.warning(f'Skipping tagging for {filepath.name}: unsupported file type')
             except Exception as e:
-                self.report_warning(f'Could not tag {filepath.name}: {e}')
+                logging.error(f'Could not tag {filepath.name}: {e}')
         else:
-            self.to_screen('No cover art or metadata found.')
+            logging.info('No cover art or metadata found.')
 
         return [], info
 
@@ -73,6 +74,7 @@ class DownloadWorker(QObject):
     error = Signal(str, str)
 
     def run(self, playlist_id, track_indices, save_path, audio_format, album_details=None):
+        logging.info(f"Starting download for playlist_id={playlist_id}, track_indices={track_indices}, save_path={save_path}, audio_format={audio_format}")
         with TemporaryDirectory() as temp_save_path:
             try:
                 playlist_url = f"https://youtube.com/playlist?list={playlist_id}"
@@ -102,6 +104,7 @@ class DownloadWorker(QObject):
                     'playlist_items': items_to_download,
                     'writethumbnail': True,
                 }
+                logging.debug(f"yt-dlp options: {ydl_opts}")
 
                 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
                     if sys.platform.startswith('win'):
@@ -111,10 +114,13 @@ class DownloadWorker(QObject):
                     
                     # set bundled ffmpeg location
                     ydl_opts['ffmpeg_location'] = os.path.join(sys._MEIPASS, ffmpeg_name)
+                    logging.debug(f"Set ffmpeg location to: {ydl_opts['ffmpeg_location']}")
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.add_post_processor(TagAudioPP(ydl, album_details), when='post_process')
+                    logging.info("Starting yt-dlp download")
                     ydl.download([playlist_url])
+                    logging.info("Finished yt-dlp download")
 
                 for p in Path(temp_save_path).iterdir():
                     if p.is_file() and p.suffix.lower() in {'.mp3', '.flac', '.m4a', '.opus', '.wav'}:
@@ -126,11 +132,13 @@ class DownloadWorker(QObject):
                             dest_path = dest_dir / f"{p.stem} ({counter}){p.suffix}"
                             counter += 1
                         
+                        logging.info(f"Moving {p} to {dest_path}")
                         shutil.copy(p, dest_path)
 
             except Exception:
                 tb = traceback.format_exc()
-                print(tb, file=sys.stderr)
+                logging.error(f"An error occurred during processing:\n{tb}")
                 self.error.emit("An error occurred during processing.", tb)
             else:
+                logging.info(f"Successfully downloaded {len(track_indices)} track(s)!")
                 self.finished.emit(self.tr("Successfully downloaded {0} track(s)!").format(len(track_indices)))

@@ -1,3 +1,4 @@
+import logging
 from ytmusicapi import YTMusic
 from ytmusicapi.exceptions import YTMusicUserError
 
@@ -20,23 +21,27 @@ class YouTubeMusicClient:
             language = get_ytmusicapi_lang(get_system_locale())
         except YTMusicUserError:
             language = 'en'
+        logging.debug(f"Initializing YouTubeMusicClient with language: {language}")
         self.ytmusic = YTMusic(language=language)
 
     def set_language(self, language):
+        logging.debug(f"Setting language to: {language}")
         self.ytmusic = YTMusic(language=language)
 
     def search_albums(self, query):
         """Searches for albums with the given query."""
         if not query:
             return []
+        logging.debug(f"Searching for albums with query: {query}")
         return self.ytmusic.search(query, filter="albums", limit=50)
 
     def get_album_details(self, browse_id):
         """Gets the details of an album by its browseId."""
         if not browse_id:
             return None
+        logging.debug(f"Getting album details for browse_id: {browse_id}")
         try:
             return self.ytmusic.get_album(browseId=browse_id)
         except Exception as e:
-            print(e)
+            logging.error(f"Error getting album details: {e}")
             return None
