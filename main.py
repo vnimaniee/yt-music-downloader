@@ -4,7 +4,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtCore import QCoreApplication, QTranslator, QLocale
 
 from app.ui import MainWindow
-from app.utils import get_system_locale, resource_path
+from app.utils import get_system_locale, resource_path, setup_logging
 
 def load_translation(app):
     sys_locale = QLocale(get_system_locale())
@@ -16,6 +16,7 @@ def load_translation(app):
     return False
 
 if __name__ == "__main__":  
+    setup_logging()
     app = QApplication(sys.argv)
     load_translation(app)
     app.setFont(QFont("Segoe UI", 9))

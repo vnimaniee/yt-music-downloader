@@ -1,5 +1,6 @@
 import requests
 import re
+import logging
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget,
@@ -50,6 +51,7 @@ class ErrorDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        logging.info("Initializing main window")
         self.setWindowTitle(f"YT Music Downloader")
         self.resize(1200, 900)
 
@@ -174,12 +176,15 @@ class MainWindow(QMainWindow):
         if query is None:
             query = self.search_input.text()
         if not query: return
+        logging.info(f"Searching for albums with query: '{query}'")
         self.results_table.setRowCount(0)
         if not preserve_details:
             self.clear_details()
         try:
             search_results = self.ytmusic_client.search_albums(query)
+            logging.info(f"Found {len(search_results)} results")
         except Exception as e:
+            logging.error(f"Search failed: {e}")
             self.statusBar().showMessage(f"Search failed: {e}", 5000)
             return
         for album in search_results:
@@ -214,15 +219,18 @@ class MainWindow(QMainWindow):
         selected = self.results_table.selectedItems()
         if not selected: return
         browse_id = selected[0].data(Qt.UserRole)
+        logging.info(f"Displaying album details for browse_id: {browse_id}")
         if not browse_id: self.clear_details(); return
         try:
             album_details = self.ytmusic_client.get_album_details(browse_id)
             self._update_album_details_ui(album_details)
         except Exception as e:
+            logging.error(f"Error fetching album details: {e}")
             self.statusBar().showMessage(f"Error fetching album details: {e}", 5000)
             self.clear_details()
 
     def _update_album_details_ui(self, album_details):
+        logging.info(f"Updating album details UI for album: {album_details.get('title')}")
         self.current_album_details = album_details
         self.current_album_playlist_id = album_details.get('audioPlaylistId')
 
@@ -235,12 +243,14 @@ class MainWindow(QMainWindow):
                 pixmap = QPixmap()
                 pixmap.loadFromData(requests.get(album_details['thumbnails'][-1]['url']).content)
                 self.album_art_label.setPixmap(pixmap.scaled(self.album_art_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            except requests.exceptions.RequestException:
+            except requests.exceptions.RequestException as e:
+                logging.warning(f"Failed to load album art: {e}")
                 self.album_art_label.setText(self.tr("Image not available"))
         
         self.tracklist_table.blockSignals(True)
         self.tracklist_table.setRowCount(0)
         if album_details.get('tracks'):
+            logging.info(f"Populating tracklist with {len(album_details['tracks'])} tracks")
             for i, track in enumerate(album_details['tracks']):
                 row = self.tracklist_table.rowCount()
                 self.tracklist_table.insertRow(row)
@@ -266,7 +276,9 @@ class MainWindow(QMainWindow):
         self._update_download_controls_state()
 
     def on_search_language_changed(self):
-        self.ytmusic_client.set_language(self.search_language.currentText())
+        new_lang = self.search_language.currentText()
+        logging.info(f"Search language changed to: {new_lang}")
+        self.ytmusic_client.set_language(new_lang)
         
         current_browse_id = self.current_album_details.get('browseId') if self.current_album_details else None
 
@@ -274,9 +286,11 @@ class MainWindow(QMainWindow):
 
         if current_browse_id:
             try:
+                logging.info(f"Refreshing album details for browse_id: {current_browse_id}")
                 new_details = self.ytmusic_client.get_album_details(current_browse_id)
                 self._update_album_details_ui(new_details)
             except Exception as e:
+                logging.error(f"Error refreshing album details: {e}")
                 self.statusBar().showMessage(f"Error refreshing album details: {e}", 5000)
 
     def _get_checkable_rows(self):
@@ -311,6 +325,7 @@ class MainWindow(QMainWindow):
 
     def toggle_all_tracks(self, state):
         state = Qt.CheckState(state)
+        logging.debug(f"Toggling all tracks to state: {state}")
         if state == Qt.Checked or state == Qt.PartiallyChecked:
             new_check_state = Qt.Checked
         else:  # state == Qt.Unchecked
@@ -338,6 +353,7 @@ class MainWindow(QMainWindow):
         
         audio_format = self.format_selector.currentText()
         language = self.search_language.currentText()
+        logging.info(f"Initiating download of {len(track_indices)} tracks to '{save_path}' in format '{audio_format}'")
         self.download_button.setEnabled(False)
         self.select_all_checkbox.setEnabled(False)
         self.statusBar().showMessage(self.tr("Preparing download for {0} track(s)...").format(len(track_indices)))
@@ -362,16 +378,19 @@ class MainWindow(QMainWindow):
         self.download_thread.start()
 
     def on_download_finished(self, message):
+        logging.info(f"Download finished: {message}")
         self.statusBar().showMessage(message, 5000)
         self._update_download_controls_state()
 
     def on_download_error(self, summary, details):
+        logging.error(f"Download error: {summary} - {details}")
         self.statusBar().showMessage(summary, 10000)
         self._update_download_controls_state()
         error_dialog = ErrorDialog(summary, details, self)
         error_dialog.exec()
 
     def clear_details(self):
+        logging.info("Clearing album details")
         self.album_art_label.clear()
         self.album_art_label.setText(self.tr("Select an album to see details"))
         self.album_title_label.clear()
