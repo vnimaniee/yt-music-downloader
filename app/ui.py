@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
-    QComboBox, QFileDialog, QStatusBar, QCheckBox, QDialog, QTextEdit
+    QComboBox, QFileDialog, QStatusBar, QCheckBox, QDialog, QTextEdit, QProgressDialog
 )
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QThread
@@ -16,16 +16,15 @@ from .youtube_api import YouTubeMusicClient, get_ytmusicapi_lang, supported_lang
 from .utils import get_system_locale
 from .player import MusicPlayer
 
-class ProgressDialog(QDialog):
+class ProgressDialog(QProgressDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Downloading..."))
+        self.setLabelText(self.tr("Download in progress, please wait..."))
+        self.setMinimumSize(400, 100)
         self.setModal(True)
-        self.setFixedSize(400, 100)
-        layout = QVBoxLayout(self)
-        self.status_label = QLabel(self.tr("Download in progress, please wait..."))
-        self.status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.status_label)
+        self.setMinimumDuration(0)
+        self.setValue(0)
 
 class ErrorDialog(QDialog):
     def __init__(self, summary, details, parent=None):
@@ -167,6 +166,7 @@ class MainWindow(QMainWindow):
         
         self.ytmusic_client = YouTubeMusicClient()
         self.download_thread = None
+        self.download_worker = None
         self.current_album_playlist_id = None
         self.current_album_details = None
         
@@ -359,22 +359,27 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(self.tr("Preparing download for {0} track(s)...").format(len(track_indices)))
 
         self.progress_dialog = ProgressDialog(self)
+        self.progress_dialog.canceled.connect(self.cancel_download)
         self.progress_dialog.show()
 
         self.download_thread = QThread()
-        worker = DownloadWorker()
-        worker.moveToThread(self.download_thread)
+        self.download_worker = DownloadWorker()
+        self.download_worker.moveToThread(self.download_thread)
         
-        worker.finished.connect(self.progress_dialog.accept)
-        worker.error.connect(self.progress_dialog.reject)
+        self.download_worker.progress.connect(self.progress_dialog.setValue)
+        self.download_worker.progress_label.connect(self.progress_dialog.setLabelText)
+        
+        self.download_worker.finished.connect(self.progress_dialog.accept)
+        self.download_worker.error.connect(self.progress_dialog.reject)
 
-        worker.finished.connect(self.on_download_finished)
-        worker.error.connect(self.on_download_error)
+        self.download_worker.finished.connect(self.on_download_finished)
+        self.download_worker.error.connect(self.on_download_error)
         
-        self.download_thread.started.connect(lambda: worker.run(self.current_album_playlist_id, track_indices, save_path, audio_format, self.current_album_details))
-        worker.finished.connect(self.download_thread.quit)
-        worker.error.connect(self.download_thread.quit)
+        self.download_thread.started.connect(lambda: self.download_worker.start_download.emit(self.current_album_playlist_id, track_indices, save_path, audio_format, self.current_album_details))
+        self.download_worker.finished.connect(self.download_thread.quit)
+        self.download_worker.error.connect(self.download_thread.quit)
         self.download_thread.finished.connect(self.download_thread.deleteLater)
+        self.download_thread.finished.connect(self._clear_download_worker)
         self.download_thread.start()
 
     def on_download_finished(self, message):
@@ -388,6 +393,16 @@ class MainWindow(QMainWindow):
         self._update_download_controls_state()
         error_dialog = ErrorDialog(summary, details, self)
         error_dialog.exec()
+
+    def cancel_download(self):
+        logging.info("Download cancellation requested by user.")
+        if self.download_worker:
+            self.download_worker.cancel()
+
+    def _clear_download_worker(self):
+        logging.debug("Clearing download worker and thread references.")
+        self.download_worker = None
+        self.download_thread = None
 
     def clear_details(self):
         logging.info("Clearing album details")
