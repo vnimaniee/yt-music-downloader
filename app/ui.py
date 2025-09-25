@@ -1,4 +1,3 @@
-import requests
 import re
 import logging
 
@@ -11,7 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QThread
 
-from .worker import DownloadWorker
+from .worker import DownloadWorker, SearchWorker, AlbumDetailsWorker
 from .youtube_api import YouTubeMusicClient, get_ytmusicapi_lang, supported_lang
 from .utils import get_system_locale
 from .player import MusicPlayer
@@ -47,6 +46,22 @@ class ErrorDialog(QDialog):
         close_button = QPushButton(self.tr("Close"))
         close_button.clicked.connect(self.accept)
         layout.addWidget(close_button, 0, Qt.AlignRight)
+
+class ProcessingDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("Processing..."))
+        layout = QVBoxLayout(self)
+        self.label = QLabel(self.tr("Please wait..."))
+        self.label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.label)
+        self.setModal(True)
+        self.setMinimumSize(400, 100)
+        self.setWindowFlag(Qt.WindowCloseButtonHint, False)
+        self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+
+    def set_text(self, text):
+        self.label.setText(text)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -170,24 +185,42 @@ class MainWindow(QMainWindow):
         self.download_worker = None
         self.current_album_playlist_id = None
         self.current_album_details = None
-        
+
+        self.processing_dialog = ProcessingDialog(self)
+
+        self.search_thread = QThread()
+        self.search_worker = SearchWorker()
+        self.search_worker.moveToThread(self.search_thread)
+        self.search_worker.finished.connect(self.on_search_finished)
+        self.search_worker.error.connect(self.on_worker_error)
+        self.search_thread.start()
+
+        self.album_details_thread = QThread()
+        self.album_details_worker = AlbumDetailsWorker()
+        self.album_details_worker.moveToThread(self.album_details_thread)
+        self.album_details_worker.finished.connect(self.on_get_details_finished)
+        self.album_details_worker.error.connect(self.on_worker_error)
+        self.album_details_thread.start()
+
         self.clear_details() # Set initial state
 
     def search_albums(self, query=None, preserve_details=False):
         if query is None:
             query = self.search_input.text()
         if not query: return
-        logging.info(f"Searching for albums with query: '{query}'")
+
+        logging.info(f"Initiating search for query: '{query}'")
+        self.processing_dialog.setWindowTitle(self.tr("Searching..."))
+        self.processing_dialog.set_text(self.tr("Searching for albums..."))
+        self.processing_dialog.show()
+        self.search_worker.start_search.emit(self.ytmusic_client, query)
+
+    def on_search_finished(self, search_results):
+        logging.info(f"Found {len(search_results)} results")
+        self.processing_dialog.hide()
         self.results_table.setRowCount(0)
-        if not preserve_details:
-            self.clear_details()
-        try:
-            search_results = self.ytmusic_client.search_albums(query)
-            logging.info(f"Found {len(search_results)} results")
-        except Exception as e:
-            logging.error(f"Search failed: {e}")
-            self.statusBar().showMessage(f"Search failed: {e}", 5000)
-            return
+        self.clear_details()
+
         for album in search_results:
             row = self.results_table.rowCount()
 
@@ -216,21 +249,34 @@ class MainWindow(QMainWindow):
             self.results_table.setItem(row, 2, QTableWidgetItem(year))
             self.results_table.setItem(row, 3, QTableWidgetItem(album_type))
 
+    def on_worker_error(self, summary, details):
+        logging.error(f"A worker failed: {summary} - {details}")
+        self.processing_dialog.hide()
+        self.statusBar().showMessage(summary, 10000)
+        error_dialog = ErrorDialog(summary, details, self)
+        error_dialog.exec()
+
     def display_album_details(self):
         selected = self.results_table.selectedItems()
         if not selected: return
         browse_id = selected[0].data(Qt.UserRole)
         logging.info(f"Displaying album details for browse_id: {browse_id}")
         if not browse_id: self.clear_details(); return
-        try:
-            album_details = self.ytmusic_client.get_album_details(browse_id)
-            self._update_album_details_ui(album_details)
-        except Exception as e:
-            logging.error(f"Error fetching album details: {e}")
-            self.statusBar().showMessage(f"Error fetching album details: {e}", 5000)
+        
+        self.processing_dialog.setWindowTitle(self.tr("Loading..."))
+        self.processing_dialog.set_text(self.tr("Loading album details..."))
+        self.processing_dialog.show()
+        self.album_details_worker.start_get_details.emit(self.ytmusic_client, browse_id)
+
+    def on_get_details_finished(self, album_details, image_content):
+        self.processing_dialog.hide()
+        if album_details:
+            self._update_album_details_ui(album_details, image_content)
+        else:
+            self.statusBar().showMessage(self.tr("Failed to fetch album details."), 5000)
             self.clear_details()
 
-    def _update_album_details_ui(self, album_details):
+    def _update_album_details_ui(self, album_details, image_content):
         logging.info(f"Updating album details UI for album: {album_details.get('title')}")
         self.current_album_details = album_details
         self.current_album_playlist_id = album_details.get('audioPlaylistId')
@@ -239,14 +285,12 @@ class MainWindow(QMainWindow):
         self.album_artist_label.setText(', '.join([a['name'] for a in album_details.get('artists', [])]))
         self.album_year_label.setText(str(album_details.get('year', '')))
 
-        if album_details.get('thumbnails'):
-            try:
-                pixmap = QPixmap()
-                pixmap.loadFromData(requests.get(album_details['thumbnails'][-1]['url']).content)
-                self.album_art_label.setPixmap(pixmap.scaled(self.album_art_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            except requests.exceptions.RequestException as e:
-                logging.warning(f"Failed to load album art: {e}")
-                self.album_art_label.setText(self.tr("Image not available"))
+        if image_content:
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_content)
+            self.album_art_label.setPixmap(pixmap.scaled(self.album_art_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            self.album_art_label.setText(self.tr("Image not available"))
         
         self.tracklist_table.blockSignals(True)
         self.tracklist_table.setRowCount(0)
@@ -280,19 +324,6 @@ class MainWindow(QMainWindow):
         new_lang = self.search_language.currentText()
         logging.info(f"Search language changed to: {new_lang}")
         self.ytmusic_client.set_language(new_lang)
-        
-        current_browse_id = self.current_album_details.get('browseId') if self.current_album_details else None
-
-        self.search_albums(preserve_details=bool(current_browse_id))
-
-        if current_browse_id:
-            try:
-                logging.info(f"Refreshing album details for browse_id: {current_browse_id}")
-                new_details = self.ytmusic_client.get_album_details(current_browse_id)
-                self._update_album_details_ui(new_details)
-            except Exception as e:
-                logging.error(f"Error refreshing album details: {e}")
-                self.statusBar().showMessage(f"Error refreshing album details: {e}", 5000)
 
     def _get_checkable_rows(self):
         return [r for r in range(self.tracklist_table.rowCount()) if self.tracklist_table.item(r, 0).flags() & Qt.ItemIsUserCheckable]
@@ -419,4 +450,3 @@ class MainWindow(QMainWindow):
         self.current_album_playlist_id = None
         self.current_album_details = None
         self.player_widget.stop_playback()
-

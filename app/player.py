@@ -20,10 +20,6 @@ class MusicPlayer(QWidget):
         self.currently_playing_track = None
         self.current_track_row = -1
         self.current_track_retries = 0
-        self.yt_dlp = yt_dlp.YoutubeDL({
-            'quiet': True,
-            'format': 'bestaudio/best',
-        })
 
         self.volume_before_mute = 100
 

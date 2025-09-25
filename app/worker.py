@@ -3,6 +3,7 @@ import sys
 import shutil
 import traceback
 import logging
+import requests
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -71,6 +72,52 @@ class TagAudioPP(PostProcessor):
 
 class CancelledError(Exception):
     pass
+
+class SearchWorker(QObject):
+    finished = Signal(list)
+    error = Signal(str, str)
+    start_search = Signal(object, str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.start_search.connect(self._do_search)
+
+    def _do_search(self, ytmusic_client, query):
+        try:
+            logging.info(f"Worker searching for albums with query: '{query}'")
+            search_results = ytmusic_client.search_albums(query)
+            logging.info(f"Worker found {len(search_results)} results")
+            self.finished.emit(search_results)
+        except Exception:
+            tb = traceback.format_exc()
+            logging.error(f"An error occurred during search:\n{tb}")
+            self.error.emit("An error occurred during search.", tb)
+
+class AlbumDetailsWorker(QObject):
+    finished = Signal(object, object)
+    error = Signal(str, str)
+    start_get_details = Signal(object, str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.start_get_details.connect(self._do_get_details)
+
+    def _do_get_details(self, ytmusic_client, browse_id):
+        try:
+            logging.info(f"Worker getting album details for browse_id: {browse_id}")
+            album_details = ytmusic_client.get_album_details(browse_id)
+            image_content = None
+            if album_details and album_details.get('thumbnails'):
+                try:
+                    image_content = requests.get(album_details['thumbnails'][-1]['url']).content
+                except requests.exceptions.RequestException as e:
+                    logging.warning(f"Failed to load album art in worker: {e}")
+            logging.info(f"Worker got album details for: {album_details.get('title')}")
+            self.finished.emit(album_details, image_content)
+        except Exception:
+            tb = traceback.format_exc()
+            logging.error(f"An error occurred during get_album_details:\n{tb}")
+            self.error.emit("An error occurred while fetching album details.", tb)
 
 class DownloadWorker(QObject):
     finished = Signal(str)
