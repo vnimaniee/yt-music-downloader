@@ -54,12 +54,12 @@
 <context>
     <name>ErrorDialog</name>
     <message>
-        <location filename="../app/ui.py" line="32"/>
+        <location filename="../app/ui.py" line="33"/>
         <source>Error</source>
         <translation>오류</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="46"/>
+        <location filename="../app/ui.py" line="47"/>
         <source>Close</source>
         <translation>닫기</translation>
     </message>
@@ -67,39 +67,39 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../app/ui.py" line="69"/>
+        <location filename="../app/ui.py" line="70"/>
         <source>Enter album name to search...</source>
         <translation>검색어 입력 (앨범·제목·아티스트 등)...</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="70"/>
+        <location filename="../app/ui.py" line="71"/>
         <source>Search</source>
         <translation>검색</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="84"/>
-        <location filename="../app/ui.py" line="117"/>
+        <location filename="../app/ui.py" line="85"/>
+        <location filename="../app/ui.py" line="118"/>
         <source>Title</source>
         <translation>제목</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="84"/>
+        <location filename="../app/ui.py" line="85"/>
         <source>Artist</source>
         <translation>아티스트</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="84"/>
+        <location filename="../app/ui.py" line="85"/>
         <source>Year</source>
         <translation>연도</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="84"/>
+        <location filename="../app/ui.py" line="85"/>
         <source>Type</source>
         <translation>구분</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="100"/>
-        <location filename="../app/ui.py" line="410"/>
+        <location filename="../app/ui.py" line="101"/>
+        <location filename="../app/ui.py" line="411"/>
         <source>Select an album to see details</source>
         <translation>앨범을 선택하여 세부사항 확인</translation>
     </message>
@@ -108,17 +108,17 @@
         <translation type="vanished">#</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="117"/>
+        <location filename="../app/ui.py" line="118"/>
         <source>Duration</source>
         <translation>길이</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="138"/>
+        <location filename="../app/ui.py" line="139"/>
         <source>Download</source>
         <translation>다운로드</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="139"/>
+        <location filename="../app/ui.py" line="140"/>
         <source>Format:</source>
         <translation>파일 형식:</translation>
     </message>
@@ -127,28 +127,28 @@
         <translation type="vanished">선택된 음악 없음</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="248"/>
+        <location filename="../app/ui.py" line="249"/>
         <source>Image not available</source>
         <translation>이미지 없음</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="266"/>
-        <location filename="../app/ui.py" line="342"/>
+        <location filename="../app/ui.py" line="267"/>
+        <location filename="../app/ui.py" line="343"/>
         <source>This album is not available for download.</source>
         <translation>이 앨범은 다운로드할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="349"/>
+        <location filename="../app/ui.py" line="350"/>
         <source>No tracks checked for download.</source>
         <translation>선택된 트랙이 없습니다.</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="351"/>
+        <location filename="../app/ui.py" line="352"/>
         <source>Select Download Folder</source>
         <translation>다운로드 경로 선택</translation>
     </message>
     <message>
-        <location filename="../app/ui.py" line="359"/>
+        <location filename="../app/ui.py" line="360"/>
         <source>Preparing download for {0} track(s)...</source>
         <translation>{0}개 트랙 다운로드 준비 중...</translation>
     </message>
@@ -192,44 +192,36 @@
 <context>
     <name>MusicPlayer</name>
     <message>
-        <location filename="../app/player.py" line="135"/>
         <source>Preparing to play track...</source>
-        <translation>재생 준비 중...</translation>
+        <translation type="vanished">재생 준비 중...</translation>
     </message>
     <message>
-        <location filename="../app/player.py" line="154"/>
         <source>No music selected</source>
-        <translation>선택된 음악 없음</translation>
+        <translation type="vanished">선택된 음악 없음</translation>
     </message>
     <message>
-        <location filename="../app/player.py" line="173"/>
         <source>Cannot play track - no album playlist ID found.</source>
-        <translation>트랙을 재생할 수 없습니다 - album playlist ID를 찾을 수 없습니다.</translation>
+        <translation type="vanished">트랙을 재생할 수 없습니다 - album playlist ID를 찾을 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../app/player.py" line="179"/>
         <source>Could not find track info.</source>
-        <translation>트랙 정보를 찾을 수 없습니다.</translation>
+        <translation type="vanished">트랙 정보를 찾을 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../app/player.py" line="184"/>
         <source>Fetching stream URL...</source>
-        <translation>스트림 URL 가져오는 중...</translation>
+        <translation type="vanished">스트림 URL 가져오는 중...</translation>
     </message>
     <message>
-        <location filename="../app/player.py" line="214"/>
         <source>Playing...</source>
-        <translation>재생 중...</translation>
+        <translation type="vanished">재생 중...</translation>
     </message>
     <message>
-        <location filename="../app/player.py" line="221"/>
         <source>Playback failed. Retrying... ({0}/3)</source>
-        <translation>재생 실패. 다시 시도 중...  ({0}/3)</translation>
+        <translation type="vanished">재생 실패. 다시 시도 중...  ({0}/3)</translation>
     </message>
     <message>
-        <location filename="../app/player.py" line="225"/>
         <source>Playback failed. Please try another track.</source>
-        <translation>재생에 실패했습니다. 다른 트랙으로 시도해 보세요.</translation>
+        <translation type="vanished">재생에 실패했습니다. 다른 트랙으로 시도해 보세요.</translation>
     </message>
 </context>
 <context>
@@ -243,6 +235,11 @@
         <location filename="../app/ui.py" line="23"/>
         <source>Download in progress, please wait...</source>
         <translation>다운로드 중. 잠시만 기다려 주세요...</translation>
+    </message>
+    <message>
+        <location filename="../app/ui.py" line="24"/>
+        <source>Cancel</source>
+        <translation>취소</translation>
     </message>
 </context>
 </TS>

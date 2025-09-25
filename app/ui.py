@@ -21,6 +21,7 @@ class ProgressDialog(QProgressDialog):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Downloading..."))
         self.setLabelText(self.tr("Download in progress, please wait..."))
+        self.setCancelButtonText(self.tr("Cancel"))
         self.setMinimumSize(400, 100)
         self.setModal(True)
         self.setMinimumDuration(0)
