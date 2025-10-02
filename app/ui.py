@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
     QComboBox, QFileDialog, QStatusBar, QCheckBox, QDialog, QTextEdit, QProgressDialog
 )
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QFontDatabase
 from PySide6.QtCore import Qt, QThread
 
 from .worker import DownloadWorker, SearchWorker, AlbumDetailsWorker
@@ -39,6 +39,8 @@ class ErrorDialog(QDialog):
         layout.addWidget(summary_label)
 
         details_box = QTextEdit()
+        details_box.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        details_box.setLineWrapMode(QTextEdit.NoWrap)
         details_box.setText(details)
         details_box.setReadOnly(True)
         layout.addWidget(details_box)
@@ -118,6 +120,7 @@ class MainWindow(QMainWindow):
         self.album_art_label.setMinimumSize(300, 300)
         self.album_title_label = QLabel()
         self.album_title_label.setAlignment(Qt.AlignCenter)
+        self.album_title_label.setOpenExternalLinks(True)
         self.album_artist_label = QLabel()
         self.album_artist_label.setAlignment(Qt.AlignCenter)
         self.album_year_label = QLabel()
@@ -281,7 +284,12 @@ class MainWindow(QMainWindow):
         self.current_album_details = album_details
         self.current_album_playlist_id = album_details.get('audioPlaylistId')
 
-        self.album_title_label.setText(f"<b>{album_details['title']}</b>")
+        if self.current_album_playlist_id:
+            url = f"https://youtube.com/playlist?list={self.current_album_playlist_id}"
+            self.album_title_label.setText(f'<a href="{url}"><b>{album_details["title"]}</b></a>')
+        else:
+            self.album_title_label.setText(f"<b>{album_details['title']}</b>")
+
         self.album_artist_label.setText(', '.join([a['name'] for a in album_details.get('artists', [])]))
         self.album_year_label.setText(str(album_details.get('year', '')))
 
