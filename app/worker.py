@@ -15,8 +15,9 @@ from yt_dlp.postprocessor.common import PostProcessor
 from .tagging import tag_audio
 
 class TagAudioPP(PostProcessor):
-    def __init__(self, ydl, album_details=None):
+    def __init__(self, ydl, save_path, album_details=None):
         super().__init__(ydl)
+        self.save_path = save_path
         self.album_details = album_details
 
     def run(self, info):
@@ -67,6 +68,17 @@ class TagAudioPP(PostProcessor):
                 logging.error(f'Could not tag {filepath.name}: {e}')
         else:
             logging.info('No cover art or metadata found.')
+
+        dest_dir = Path(self.save_path)
+        dest_path = dest_dir / filepath.name
+        
+        counter = 1
+        while dest_path.exists():
+            dest_path = dest_dir / f"{filepath.stem} ({counter}){filepath.suffix}"
+            counter += 1
+        
+        logging.info(f"Moving {filepath} to {dest_path}")
+        shutil.move(filepath, dest_path)
 
         return [], info
 
@@ -243,26 +255,11 @@ class DownloadWorker(QObject):
 
                 self.progress_label.emit(self.tr("Preparing to download..."))
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.add_post_processor(TagAudioPP(ydl, album_details), when='post_process')
+                    ydl.add_post_processor(TagAudioPP(ydl, save_path, album_details), when='post_process')
                     logging.info("Starting yt-dlp download")
                     ydl.download([playlist_url])
                     logging.info("Finished yt-dlp download")
 
-                self.progress.emit(98)
-                self.progress_label.emit(self.tr("Moving files..."))
-                for i, p in enumerate(Path(temp_save_path).iterdir()):
-                    if p.is_file() and p.suffix.lower() in {'.mp3', '.flac', '.m4a', '.opus', '.wav'}:
-                        dest_dir = Path(save_path)
-                        dest_path = dest_dir / p.name
-                        
-                        counter = 1
-                        while dest_path.exists():
-                            dest_path = dest_dir / f"{p.stem} ({counter}){p.suffix}"
-                            counter += 1
-                        
-                        logging.info(f"Moving {p} to {dest_path}")
-                        shutil.copy(p, dest_path)
-                
                 self.progress.emit(100)
 
             except CancelledError:
